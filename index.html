@@ -1,0 +1,257 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+    <meta http-equiv="Content-Script-Type" content="text/javascript">   
+    <title>mink.click machine</title>
+
+</head>
+
+<body>
+
+    <p id="main"></p>
+    <p id="debug"></p>
+
+    <script type="text/javascript">
+
+    var g_numTracks = 5;    // number of simultaneous tracks on the page (vertical)
+    var g_numCbxs = 16;     // number of checkboxes in a track (horizontal)
+    var g_cbx = new Array(g_numTracks); // checkboxes in one track
+    var g_curBox = 0;                   // the current box that we're on
+    var g_playCount = 0;                // no longer used?
+    var g_canPlay = false;              // is play/pause enabled for play
+    var g_interval = 0;                 // ID of the 250ms timer (0 if not playing)
+    var g_t = 250;                      // milliseconds between advancement of current checkbox
+    var g_trackReady = new Array(g_numTracks);  // is this track ready to play?
+
+    init();
+
+    function init()
+    {
+        // to begin: all tracks not ready to play
+        for (i = 0; i < g_numTracks; i++)
+        {
+            g_trackReady[i] = false;
+        }
+
+        // to begin: set up the table
+        buildTable(g_numTracks);
+    };
+
+    // play/pause button was hit
+    function playPause()
+    {
+        if (g_interval == 0)
+        {
+            play();     // if g_interval is 0 we're not currently playing
+        }
+        else
+        {
+            stop();
+        }
+    }
+
+    function play()
+    {
+        debug("play");
+        //if (g_canPlay)    // don't need because button is not enabled if g_canPlay is false
+        {
+            // set the interval for calling playIfChecked every 250 ms
+            playIfChecked();
+            g_interval = setInterval(playIfChecked, g_t);
+        }
+    }
+
+    // stop playing: clear the interval and set it to 0; clear the box that is highlighted
+    function stop()
+    {
+        debug("stop");
+        clearInterval(g_interval);
+        g_interval = 0;
+        clearBox(prevCell(g_curBox));
+        g_curBox = 0;
+    }
+
+    // when we get a "oncanplaythrough" notification: set a flag in the g_trackReady array
+    function onPlayThrough(n)
+    {
+        //debug("track " + n.toString() + " is ready");
+        g_trackReady[n] = true;
+        g_canPlay = true;
+        for (i = 0; i < g_numTracks; i++)
+        {
+            if (g_trackReady[i] == false)
+            {
+                debug("track " + i.toString() + " NOT ready");
+                g_canPlay = false;
+            }
+        }
+        // if any track not ready to play, disable to play/pause button
+        document.getElementById("playpause").disabled = (g_canPlay == false);
+    }
+
+    // make a table with the correct number of tracks
+    function buildTable(numTracks)
+    {
+        var main = document.getElementById("main");
+        var table = document.createElement("table");
+
+        for (i = 0; i < numTracks; i++) {
+            tr = initTrack(i);
+            table.appendChild(tr);
+        }
+        main.appendChild(table);
+        var playPauseBtn = document.createElement("input");
+        playPauseBtn.setAttribute("type", "button");
+        playPauseBtn.disabled = true;
+        playPauseBtn.setAttribute("id", "playpause");
+        playPauseBtn.setAttribute("value", "Play/Pause >");
+        playPauseBtn.setAttribute("onclick", "playPause()");
+        main.appendChild(playPauseBtn);
+    }
+
+    function initTrack(n)
+    {
+        // create a new array of boxes for this row
+        g_cbx[n] = new Array(g_numCbxs);
+
+        // create a new html table row with an audio element in it
+        var tr = document.createElement("tr");
+        var audio = document.createElement("audio");
+        audio.setAttribute("id", "track" + n.toString());
+        audio.setAttribute("controls", "");
+        audio.setAttribute("oncanplaythrough", "onPlayThrough(" + n.toString() + ")");
+
+        // put a source element inside the audio element
+        var source = document.createElement("source");
+
+        var name = "";
+        switch (n)
+        {
+            case 0:
+                name = "kick";
+                source.setAttribute("src", "sounds/web808/kicks/808-Kicks15.wav");
+                break;
+            case 1:
+                name = "snare";
+                source.setAttribute("src", "sounds/web808/snares/808-Snare03.wav");
+                break;
+            case 2:
+                name = "clap";
+                source.setAttribute("src", "sounds/web808/snares/808-Clap04.wav");
+                break;
+            case 3:
+                name = "closed hi hat";
+                source.setAttribute("src", "sounds/web808/hihats/808-HiHats02.wav");
+                break;
+            case 4:
+            default:
+                name = "open hi hat";
+                source.setAttribute("src", "sounds/web808/hihats/808-OpenHiHats07.wav");
+                break;
+    
+        }
+        audio.appendChild(source);
+
+        var para = document.createElement("p");
+        para.innerHTML = name;
+        var cell = tr.insertCell(-1);
+        cell.appendChild(para);
+
+        var cell2 = tr.insertCell(-1);
+        cell2.appendChild(audio);
+
+        // put the boxes in this table row
+        for (j = 0; j < g_numCbxs; j++) {
+            var cell3 = tr.insertCell(-1);
+            g_cbx[n][j] = document.createElement("input");
+            g_cbx[n][j].setAttribute("type", "checkbox");
+            g_cbx[n][j].setAttribute("id", "cbx[" + n.toString() + "][" + j.toString() + "]");
+            cell3.appendChild(g_cbx[n][j]);
+        }
+
+        // returns a table row
+        return tr;
+     };
+
+    // this is the function that's called once every 250 ms
+    function playIfChecked()
+    {
+        for (i = 0; i < g_numTracks; i++)
+        {
+            // playIffChecked (two f's) is called once per track for a certain box
+            playIffChecked(i, g_curBox);
+        }
+        // here we advance the current box
+        g_curBox++;
+        if (g_curBox == g_numCbxs)
+        {
+            g_curBox = 0;
+        }
+    };
+
+    // clearBox is called once for each track that needs to be un-highlighted
+    function clearBox(box)
+    {
+        debug("clear box " + box);
+        for (i = 0; i < g_numTracks; i++)
+        {
+            // clearTrackBox is called for a specific track and box that needs to be un-highlighted
+            clearTrackBox(i, box);
+        }
+    }
+
+    // clearTrackBox is called for a certain track and box that needs to be un-highlighted
+    function clearTrackBox(track, box)
+    {
+        elemOld = document.getElementById("cbx[" + track.toString() + "][" + box.toString() + "]");
+        elemOld.parentNode.style.backgroundColor = "#FFFFFF";
+    }
+
+    // playIffChecked (two f's) is called once per track for a certain box
+    function playIffChecked(track, box)
+    {
+        var elem = document.getElementById("cbx[" + track.toString() + "][" + box.toString() + "]");
+        elem.parentNode.style.backgroundColor = "#FDFF47";
+
+        // clearTrackBox is called for a certain track and box that needs to be un-highlighted
+        clearTrackBox(track, prevCell(box));
+
+        // if it's checked, play the sample for this track
+        if (elem.checked == true)
+        {
+            var track = document.getElementById("track" + track.toString());
+            track.currentTime = "0";
+            track.play();
+        }
+    };
+
+    // get the next box after this one, wrapping if necessary
+    function nextCell(n)
+    {
+        return (n == g_numCbxs - 1) ? 0 : n + 1;
+    };
+
+    // get the previous box from this one, wrapping if necessary
+    function prevCell(n)
+    {
+        return (n == 0) ? g_numCbxs - 1 : n - 1;
+    };
+
+    // write a debug string
+    function debug(s)
+    {
+        if ((s == null) || (s.toString() == null)) {
+            return;
+        }
+        var main = document.getElementById("debug");
+        if ((main != null) && (main.innerHTML != null)) {
+            main.innerHTML += "<br>\n" + s.toString();
+        }
+    };
+
+    </script>
+
+</body>
+</html>
